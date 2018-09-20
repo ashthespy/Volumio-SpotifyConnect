@@ -6,6 +6,7 @@ var config = new(require('v-conf'))();
 var exec = require('child_process').exec;
 const SpotifyWebApi = require('spotify-web-api-node');
 const SpotConnCtrl = require('./SpotConnController');
+var seekTimer;
 
 
 
@@ -103,7 +104,7 @@ ControllerVolspotconnect.prototype.volspotconnectDaemonConnect = function(defer)
  self.SinkActive = false;
  self.state = {
   status: 'stop',
-  service: self.servicename,
+  service: 'volspotconnect2',
   title: '',
   artist: '',
   album: '',
@@ -113,13 +114,10 @@ ControllerVolspotconnect.prototype.volspotconnectDaemonConnect = function(defer)
   trackType: 'spotify',
   seek: 0,
   duration: 0,
-  volume: 0,
   samplerate: '44.1 KHz',
   //samplerate: 'Volspotconnect2',
   bitdepth: '16 bit',
-  channels: 2,
-  streaming: true,
-  //disableUiControls: true
+  channels: 2
  };
 
  const nHost = ''; // blank = localhost
@@ -289,7 +287,8 @@ ControllerVolspotconnect.prototype.spotConnUnsetVolatile = function() {
 
 ControllerVolspotconnect.prototype.pushState = function() {
  var self = this;
- this.logger.SpConDebug(`Pushing new state :: ${self.iscurrService()}`)
+ this.logger.SpConDebug(`Pushing new state :: ${self.iscurrService()}`);
+ self.seekTimerAction();
  // Push state
  self.commandRouter.servicePushState(self.state, self.servicename);
 }
@@ -620,4 +619,20 @@ ControllerVolspotconnect.prototype.seek = function(position) {
       self.commandRouter.pushToastMessage('error', "Spotify API Error", error.message);
       self.logger.SpConDebug(error)
     });
+}
+
+ControllerVolspotconnect.prototype.seekTimerAction = function() {
+    var self = this;
+
+    if (self.state.status === 'play') {
+        if (seekTimer === undefined) {
+            seekTimer = setInterval(()=>{
+                self.state.seek = self.state.seek + 1000;
+                //console.log('SEEK: ' + self.state.seek);
+            }, 1000)
+        }
+    } else {
+        clearInterval(seekTimer);
+        seekTimer = undefined;
+    }
 }
