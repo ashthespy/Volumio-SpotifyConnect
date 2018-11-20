@@ -485,8 +485,15 @@ ControllerVolspotconnect.prototype.createVOLSPOTCONNECTFile = function () {
             hwdev = `plughw:${outdev}`;
           }
 
-          if (outdev === 'softvolume' || outdev === 'Loopback') {
+          if (outdev === 'softvolume') {
             idxcard = self.getAdditionalConf('audio_interface', 'alsa_controller', 'softvolumenumber');
+          } else if (outdev === 'Loopback') {
+            const vconfig = JSON.parse(fs.readFileSync('/tmp/vconfig.json', 'utf8', function (err) {
+              if (err) {
+                logger.error(err);
+              }
+            }));
+            idxcard = vconfig.outputdevice.value;
           } else {
             idxcard = outdev;
           }
