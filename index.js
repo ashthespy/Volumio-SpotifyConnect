@@ -1,4 +1,5 @@
 'use strict';
+/* global metrics */
 // Core Volumio stuff
 const libQ = require('kew');
 const Config = require('v-conf');
@@ -360,17 +361,26 @@ ControllerVolspotconnect.prototype.onStop = function () {
   return libQ.resolve();
 };
 
-ControllerVolspotconnect.prototype.onStart = async function () {
-  console.time('SpotifyConnectonStart');
-  var self = this;
+ControllerVolspotconnect.prototype.onStart = function () {
+  const defer = libQ.defer();
+  this.init().then(() => defer.resolve());
+  return defer.promise;
+};
 
-  var defer = libQ.defer();
+// Workaround for non Promise aware pluginmanger
+ControllerVolspotconnect.prototype.init = async function () {
+  if (typeof metrics === 'undefined') {
+    console.time('SpotifyConnecton');
+  } else {
+    metrics.time('SpotifyConnecton');
+  }
+  var self = this;
   try {
     // Do we need to create the file at each boot?
     // await creation?
     self.createConfigFile();
     self.volspotconnectDaemonConnect();
-    self.VolspotconnectServiceCmds('start');
+    await self.VolspotconnectServiceCmds('start');
 
     // Hook into Playback config
     // TODO: These are called multiple times, and there is no way to deregister them
@@ -386,10 +396,12 @@ ControllerVolspotconnect.prototype.onStart = async function () {
   } catch (e) {
     const err = 'Error starting SpotifyConnect';
     logger.error(err, e);
-    defer.reject(new Error(err, e));
   }
-  console.timeEnd('SpotifyConnectonStart');
-  return defer.promise;
+  if (typeof metrics === 'undefined') {
+    console.timeEnd('SpotifyConnecton');
+  } else {
+    metrics.log('SpotifyConnecton');
+  }
 };
 
 ControllerVolspotconnect.prototype.onUninstall = function () {
