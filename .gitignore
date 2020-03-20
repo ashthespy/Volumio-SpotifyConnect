@@ -9,4 +9,4 @@ node_modules/
 
 ## Plugin specific 
 # We don't need this, and will negate credential issues ;)
-startconnect.sh
+volspotify.toml
