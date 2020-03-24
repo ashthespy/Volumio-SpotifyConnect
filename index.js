@@ -67,12 +67,6 @@ ControllerVolspotconnect.prototype.getConfigurationFiles = function () {
   return ['config.json'];
 };
 
-ControllerVolspotconnect.prototype.onPlayerNameChanged = function (playerName) {
-  // var self = this;
-  logger.info('PlayerNameChanged');
-  this.rebuildRestartDaemon.bind(this);
-};
-
 // Plugin methods -----------------------------------------------------------------------------
 
 ControllerVolspotconnect.prototype.VolspotconnectServiceCmds = async function (cmd) {
@@ -151,10 +145,10 @@ ControllerVolspotconnect.prototype.volspotconnectDaemonConnect = function (defer
   // This is different from SinkActive, it will be triggered at the beginning
   // of a playback session (e.g. Playlist)
     logger.evnt('Device is active!');
-    self.commandRouter.pushToastMessage('info', 'Spotify Connect', 'Starting playback');
+    self.commandRouter.pushToastMessage('info', 'Spotify Connect', 'Connect is active');
     self.volumioStop().then(() => {
       self.DeviceActive = true;
-      self.state.status = 'play';
+      // self.state.status = 'play';
       self.ActiveState();
       self.pushState();
     });
@@ -252,10 +246,18 @@ ControllerVolspotconnect.prototype.initWebApi = function () {
   self.spotifyApi.setAccessToken(self.accessToken);
   self.spotifyApi.getMyDevices()
     .then(function (res) {
-      logger.debug('getMyDevices: ');
-      logger.debug(res);
-      const device = res.body.devices.find(function (el) { return el.is_active === true; });
-      self.commandRouter.sharedVars.get('system.name') === device.name ? self.device = device : self.deviceID = undefined;
+      if (res.statusCode !== 200) {
+        logger.debug('getMyDevices: ');
+        logger.debug(res);
+      }
+      const device = res.body.devices.find((el) => el.is_active === true);
+      if (device !== undefined) {
+        self.commandRouter.sharedVars.get('system.name') === device.name ? self.device = device : self.deviceID = undefined;
+      } else {
+        logger.warn('No active spotify devices found');
+        logger.debug('Devices: ', res.body);
+        self.DeactivateState();
+      }
     });
 };
 
@@ -393,8 +395,8 @@ ControllerVolspotconnect.prototype.init = async function () {
       this.rebuildRestartDaemon.bind(this));
     this.commandRouter.sharedVars.registerCallback('alsa.device',
       this.rebuildRestartDaemon.bind(this));
-    // this.commandRouter.sharedVars.registerCallback('system.name',
-    // this.rebuildRestartDaemon.bind(this));
+    this.commandRouter.sharedVars.registerCallback('system.name',
+      this.rebuildRestartDaemon.bind(this));
   } catch (e) {
     const err = 'Error starting SpotifyConnect';
     logger.error(err, e);
@@ -484,6 +486,7 @@ ControllerVolspotconnect.prototype.getAdditionalConf = function (type, controlle
 
 ControllerVolspotconnect.prototype.createConfigFile = async function () {
   var self = this;
+  logger.info('Creating VLS config file');
   try {
     let template = readFile(path.join(__dirname, 'volspotify.tmpl'));
     // Authentication
@@ -569,11 +572,16 @@ ControllerVolspotconnect.prototype.createConfigFile = async function () {
     // Sanity check
     if (conf.indexOf('undefined') > 1) {
       logger.error('SpotifyConnect Daemon config issues!');
+      // get some hints as to what when wrong
+      const trouble = conf.match(/^.*\b(undefined)\b.*$/gm);
+      logger.error('volspotify config error: ', trouble);
+      self.commandRouter.pushToastMessage('error', 'Spotify Connect', `Error getting config: ${trouble}`);
       throw Error('Undefined found found in conf');
     }
     return writeFile('/data/plugins/music_service/volspotconnect2/volspotify.toml', conf);
   } catch (e) {
     logger.error('Error creating SpotifyConnect Daemon config', e);
+    self.commandRouter.pushToastMessage('error', 'Spotify Connect', `SpotifyConnect config failed: ${e}`);
   }
 };
 
@@ -604,10 +612,14 @@ ControllerVolspotconnect.prototype.rebuildRestartDaemon = async function () {
   var self = this;
   // Deactive state
   self.DeactivateState();
-  await self.createConfigFile();
-  logger.info('Restarting Vollibrespot Daemon');
-  await self.VolspotconnectServiceCmds('restart');
-  self.commandRouter.pushToastMessage('success', 'Spotify Connect', 'Configuration has been successfully updated');
+  try {
+    await self.createConfigFile();
+    logger.info('Restarting Vollibrespot Daemon');
+    await self.VolspotconnectServiceCmds('restart');
+    self.commandRouter.pushToastMessage('success', 'Spotify Connect', 'Configuration has been successfully updated');
+  } catch (e) {
+    self.commandRouter.pushToastMessage('error', 'Spotify Connect', `Unable to update config: ${e}`);
+  }
 };
 
 // Plugin methods for the Volumio state machine
