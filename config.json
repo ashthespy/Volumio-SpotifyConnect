@@ -15,6 +15,14 @@
     "type": "boolean",
     "value": true
   },
+  "gapless": {
+    "type": "boolean",
+    "value": true
+  },
+  "autoplay": {
+    "type": "boolean",
+    "value": true
+  },
   "username": {
     "type": "string",
     "value": ""

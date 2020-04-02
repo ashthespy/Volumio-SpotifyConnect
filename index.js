@@ -374,9 +374,9 @@ ControllerVolspotconnect.prototype.onStart = function () {
 // Workaround for non Promise aware pluginmanger
 ControllerVolspotconnect.prototype.init = async function () {
   if (typeof metrics === 'undefined') {
-    console.time('SpotifyConnecton');
+    console.time('SpotifyConnect');
   } else {
-    metrics.time('SpotifyConnecton');
+    metrics.time('SpotifyConnect');
   }
   var self = this;
   try {
@@ -402,9 +402,9 @@ ControllerVolspotconnect.prototype.init = async function () {
     logger.error(err, e);
   }
   if (typeof metrics === 'undefined') {
-    console.timeEnd('SpotifyConnecton');
+    console.timeEnd('SpotifyConnect');
   } else {
-    metrics.log('SpotifyConnecton');
+    metrics.log('SpotifyConnect');
   }
 };
 
@@ -422,6 +422,7 @@ ControllerVolspotconnect.prototype.getUIConfig = function () {
     .then(function (uiconf) {
       // Do we still need the initial volume setting?
       const mixname = self.commandRouter.sharedVars.get('alsa.outputdevicemixer');
+      logger.debug(`config <${mixname}>: toggling initvol/volume_ctrl`);
       if ((mixname === '') || (mixname === 'None')) {
         uiconf.sections[0].content[0].hidden = false;
         uiconf.sections[0].content[6].hidden = false;
@@ -440,7 +441,9 @@ ControllerVolspotconnect.prototype.getUIConfig = function () {
       uiconf.sections[0].content[5].value = self.config.get('password');
       uiconf.sections[0].content[6].value.label = self.config.get('volume_ctrl');
       uiconf.sections[0].content[6].value.value = self.config.get('volume_ctrl');
-      uiconf.sections[0].content[7].value = self.config.get('debug');
+      uiconf.sections[0].content[7].value = self.config.get('gapless');
+      uiconf.sections[0].content[8].value = self.config.get('autoplay');
+      uiconf.sections[0].content[9].value = self.config.get('debug');
 
       defer.resolve(uiconf);
     })
@@ -509,11 +512,20 @@ ControllerVolspotconnect.prototype.createConfigFile = async function () {
     }
     const devicename = self.commandRouter.sharedVars.get('system.name');
     const outdev = self.commandRouter.sharedVars.get('alsa.outputdevice');
-    const mixname = self.commandRouter.sharedVars.get('alsa.outputdevicemixer');
-
     const volcuve = self.commandRouter.executeOnPlugin('audio_interface', 'alsa_controller', 'getConfigParam', 'volumecurvemode');
-    let idxcard, hwdev, mixlin, mixer, mixdev, mixeropts, initvolstr;
+    let mixname = self.commandRouter.sharedVars.get('alsa.outputdevicemixer');
+    /* eslint-disable one-var */
+    // Default values will be parsed as neccesary by the backend for these
+    let idxcard = '',
+      hwdev = '',
+      mixer = '',
+      mixdev = '',
+      mixeropts = '',
+      initvolstr = '';
+    /* eslint-enable one-var */
+    let mixlin = false;
     if ((mixname === '') || (mixname === 'None')) {
+      logger.debug('<> or <None> Mixer found, using softvol');
       // No mixer - default to (linear) Spotify volume
       mixer = 'softvol';
       mixeropts = self.config.get('volume_ctrl');
@@ -523,14 +535,12 @@ ControllerVolspotconnect.prototype.createConfigFile = async function () {
       // Some mixer is defined, set inital volume to startup volume or current volume
       mixer = 'alsa';
       initvolstr = initvol;
-      if (volcuve === 'logarithmic') {
-        mixlin = 'false';
-      } else {
-        mixlin = 'true';
+      if (volcuve !== 'logarithmic') {
+        mixlin = true;
       }
       if (outdev === 'softvolume') {
         hwdev = outdev;
-        mixlin = 'true';
+        mixlin = true;
       } else {
         hwdev = `plughw:${outdev}`;
       }
@@ -545,12 +555,17 @@ ControllerVolspotconnect.prototype.createConfigFile = async function () {
         });
         const vconfigJSON = JSON.parse(vconfig);
         idxcard = vconfigJSON.outputdevice.value;
+        mixname = vconfigJSON.mixer.value;
       } else {
         idxcard = outdev;
       }
 
       mixdev = `hw:${idxcard}`;
       mixeropts = 'linear';
+    }
+    if (self.config.get('debug')) {
+      // TODO:
+      logger.debug('Unimplemented debug mode!!');
     }
     template = await template;
     /* eslint-disable no-template-curly-in-string */
@@ -566,6 +581,8 @@ ControllerVolspotconnect.prototype.createConfigFile = async function () {
       .replace('${mixlin}', mixlin)
       .replace('${mixeropts}', mixeropts)
       .replace('${initvol}', initvolstr)
+      .replace('${autoplay}', self.config.get('autoplay'))
+      .replace('${gapless}', self.config.get('gapless'))
       .replace('${bitrate}', self.config.get('bitrate'));
       /* eslint-enable no-template-curly-in-string */
 
@@ -575,7 +592,7 @@ ControllerVolspotconnect.prototype.createConfigFile = async function () {
       // get some hints as to what when wrong
       const trouble = conf.match(/^.*\b(undefined)\b.*$/gm);
       logger.error('volspotify config error: ', trouble);
-      self.commandRouter.pushToastMessage('error', 'Spotify Connect', `Error getting config: ${trouble}`);
+      self.commandRouter.pushToastMessage('stickyerror', 'Spotify Connect', `Error reading config: ${trouble}`);
       throw Error('Undefined found found in conf');
     }
     return writeFile('/data/plugins/music_service/volspotconnect2/volspotify.toml', conf);
@@ -599,6 +616,8 @@ ControllerVolspotconnect.prototype.saveVolspotconnectAccount = function (data) {
   self.config.set('username', data.username);
   self.config.set('password', data.password);
   self.config.set('volume_ctrl', data.volume_ctrl.value);
+  self.config.set('gapless', data.gapless);
+  self.config.set('autoplay', data.autoplay);
   self.config.set('debug', data.debug);
 
   self.rebuildRestartDaemon()

@@ -11,7 +11,8 @@ bitrate = ${bitrate}
 enable-volume-normalisation = ${normalvolume} 
 normalisation-pregain = 1 # "Pregain (dB) applied by volume normalisation"
 volume-ctrl = '${mixeropts}' # Volume control type - [linear, log, fixed]. Default is linear
-autoplay = true 
+autoplay = ${autoplay} 
+gapless = ${gapless} 
 
 [Output]
 device = '${outdev}'
@@ -19,7 +20,7 @@ initial-volume = ${initvol}
 mixer = '${mixer}' # softvolume or alsa
 mixer-name = '${mixname}'
 mixer-card = '${mixdev}'
-# mixer-index = 1
+# mixer-index = 0
 # Disable alsa's mapped volume scale (cubic). Default false
 mixer-linear-volume = ${mixlin}
 backend = 'alsa'
