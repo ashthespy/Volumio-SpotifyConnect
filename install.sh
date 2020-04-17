@@ -8,15 +8,17 @@ fi
 set -eo pipefail
 
 name="volspotconnect2"
+use_local_ver=no
+libpath=/data/plugins/music_service/${name}
+configpath=/data/configuration/music_service/${name}
+
 exit_error () {
-  echo "Plugin <${name}> installation script failed!!" 
+  echo "Plugin <${name}> installation script failed!!"
 }
 trap exit_error INT ERR
 
 
 echo "Installing ${name} dependencies"
-libpath=/data/plugins/music_service/${name}
-configpath=/data/configuration/music_service/${name}
 
 ## Removing previous config
 if [ -f "${configpath}/config.json" ]; then
@@ -44,16 +46,21 @@ if [ ${VLS_BIN[$cpu]+ok} ]; then
   # Get a fixed version from the repo
   VLS_VER=v$(jq -r '.vollibrespot.version' package.json)
   LATEST_VER=$(jq -r  '.tag_name' <<< "${RELEASE_JSON}")
-  
+
   echo "Latest version: ${LATEST_VER} Requested version: ${VLS_VER}"
   echo "Supported device (arch = $cpu), downloading required packages for vollibrespot $VLS_VER"
   RELEASE_URL="https://api.github.com/repos/ashthespy/vollibrespot/releases/tags/${VLS_VER}"
-  
+
   DOWNLOAD_URL=$(curl --silent "${RELEASE_URL}" | \
     jq -r --arg VLS_BIN "${VLS_BIN[$cpu]}" '.assets[] | select(.name | contains($VLS_BIN)).browser_download_url')
   echo "Downloading file <${DOWNLOAD_URL}>"
-  
-  curl -L --output ${VLS_BIN[$cpu]} $DOWNLOAD_URL
+
+  if [[ $use_local_ver == no ]]; then
+    curl -L --output ${VLS_BIN[$cpu]} $DOWNLOAD_URL
+  elif [[ -f ${VLS_BIN[$cpu]} ]]; then
+    echo "Using local version"
+  fi
+
   if [ $? -eq 0 ]; then
     echo "Extracting..."
     ls -l ${VLS_BIN[$cpu]}
