@@ -105,6 +105,7 @@ ControllerVolspotconnect.prototype.volspotconnectDaemonConnect = function (defer
     duration: 0,
     samplerate: '44.1 KHz',
     bitdepth: '16 bit',
+    bitrate: '',
     channels: 2
   };
 
@@ -634,7 +635,7 @@ ControllerVolspotconnect.prototype.saveVolspotconnectAccount = function (data) {
   self.config.set('gapless', data.gapless);
   self.config.set('autoplay', data.autoplay);
   self.config.set('debug', data.debug);
-
+  self.state.bitrate = data.bitrate;
   self.rebuildRestartDaemon()
     .then(() => defer.resolve({}))
     .catch((e) => defer.reject(new Error('saveVolspotconnectAccountError')));
@@ -683,7 +684,7 @@ ControllerVolspotconnect.prototype.play = function () {
       logger.error(error);
     });
   } else {
-    logger.debug(`Playing on ${this.device.name} ${this.device.id} -- ${this.deviceID === this.device.id}`);
+    logger.debug('Playing on:', this.device);
     return self.spotifyApi.transferMyPlayback({ deviceIds: [this.deviceID], play: true }).catch(error => {
       self.commandRouter.pushToastMessage('error', 'Spotify Connect API Error', error.message);
       logger.error(error);
