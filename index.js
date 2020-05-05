@@ -90,6 +90,7 @@ ControllerVolspotconnect.prototype.volspotconnectDaemonConnect = function (defer
   self.DeviceActive = false;
   self.SinkActive = false;
   self.VLSStatus = '';
+  self.SPDevice = undefined; // WebAPI Device
   self.state = {
     status: 'stop',
     service: 'volspotconnect2',
@@ -241,24 +242,38 @@ ControllerVolspotconnect.prototype.volspotconnectDaemonConnect = function (defer
   });
 };
 
+ControllerVolspotconnect.prototype.checkActive = async function () {
+  const res = await this.spotifyApi.getMyDevices();
+  if (res.statusCode !== 200) {
+    logger.debug('getMyDevices: ');
+    logger.debug(res);
+    return false;
+  }
+  const activeDevice = res.body.devices.find((el) => el.is_active === true);
+  if (activeDevice !== undefined) {
+    // This will fail if someone sets a custom name in the template..
+    if (this.commandRouter.sharedVars.get('system.name') === activeDevice.name) {
+      this.SPDevice = activeDevice;
+      logger.info(`Setting VLS device_id: ${activeDevice.id}`);
+      this.deviceID = activeDevice.id;
+      return true;
+    } else {
+      this.SPDevice = undefined;
+      return false;
+    }
+  } else {
+    logger.warn('No active spotify devices found');
+    logger.debug('Devices: ', res.body);
+    return false;
+  }
+};
+
 ControllerVolspotconnect.prototype.initWebApi = function () {
   var self = this;
   self.spotifyApi.setAccessToken(self.accessToken);
-  self.spotifyApi.getMyDevices()
-    .then(function (res) {
-      if (res.statusCode !== 200) {
-        logger.debug('getMyDevices: ');
-        logger.debug(res);
-      }
-      const device = res.body.devices.find((el) => el.is_active === true);
-      if (device !== undefined) {
-        self.commandRouter.sharedVars.get('system.name') === device.name ? self.device = device : self.deviceID = undefined;
-      } else {
-        logger.warn('No active spotify devices found');
-        logger.debug('Devices: ', res.body);
-        self.DeactivateState();
-      }
-    });
+  if (!this.checkActive()) {
+    self.DeactivateState();
+  }
 };
 
 ControllerVolspotconnect.prototype.checkWebApi = function () {
@@ -661,11 +676,19 @@ ControllerVolspotconnect.prototype.pause = function () {
 
 ControllerVolspotconnect.prototype.play = function () {
   var self = this;
-  logger.cmd('Received play');
-  return self.spotifyApi.play().catch(error => {
-    self.commandRouter.pushToastMessage('error', 'Spotify Connect API Error', error.message);
-    logger.error(error);
-  });
+  logger.cmd(`Received play: <${this.active}>`);
+  if (this.active) {
+    return self.spotifyApi.play().catch(error => {
+      self.commandRouter.pushToastMessage('error', 'Spotify Connect API Error', error.message);
+      logger.error(error);
+    });
+  } else {
+    logger.debug(`Playing on ${this.device.name} ${this.device.id} -- ${this.deviceID === this.device.id}`);
+    return self.spotifyApi.transferMyPlayback({ deviceIds: [this.deviceID], play: true }).catch(error => {
+      self.commandRouter.pushToastMessage('error', 'Spotify Connect API Error', error.message);
+      logger.error(error);
+    });
+  }
 };
 
 ControllerVolspotconnect.prototype.next = function () {
