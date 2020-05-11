@@ -26,20 +26,19 @@ var seekTimer;
 module.exports = ControllerVolspotconnect;
 
 function ControllerVolspotconnect (context) {
-  var self = this;
   // Save a reference to the parent commandRouter
-  self.context = context;
-  self.commandRouter = self.context.coreCommand;
+  this.context = context;
+  this.commandRouter = this.context.coreCommand;
 
   // Volatile for metadata
-  self.unsetVol = () => {
+  this.unsetVol = () => {
     logger.info('unSetVolatile called');
     return this.spotConnUnsetVolatile();
   };
 
   // SpotifyWebApi
-  self.spotifyApi = new SpotifyWebApi();
-  self.device = undefined;
+  this.spotifyApi = new SpotifyWebApi();
+  this.device = undefined;
 }
 
 ControllerVolspotconnect.prototype.onVolumioStart = function () {
@@ -158,16 +157,17 @@ ControllerVolspotconnect.prototype.volspotconnectDaemonConnect = function (defer
     this.pushState();
   });
 
-  this.SpotConn.on(this.Events.PlaybackInactive, async (data) => {
+  this.SpotConn.on(this.Events.PlaybackInactive, (data) => {
     logger.evnt('<PlaybackInactive> Device palyback is inactive');
     // Device has finished playing current queue or received a pause command
     //  overkill async, who are we waiting for?
     if (this.VLSStatus === 'pause') {
       logger.warn('Device is paused');
     } else if (!this.active) {
-      await this.DeactivateState();
+      logger.warn('Device is not active. Cleaning up!');
+      this.DeactivateState();
     } else {
-      logger.warn(`Device is_active: ${this.active}`);
+      logger.warn(`Device Session is_active: ${this.active}`);
     }
   });
 
@@ -181,10 +181,10 @@ ControllerVolspotconnect.prototype.volspotconnectDaemonConnect = function (defer
     this.commandRouter.servicePushState(this.state, this.servicename);
   });
 
-  this.SpotConn.on(this.Events.DeviceInactive, async (data) => {
-  // Connect session has been exited
-    await this.DeactivateState();
+  this.SpotConn.on(this.Events.DeviceInactive, (data) => {
+    // Connect session has been exited
     logger.evnt('<DeviceInactive> Connect Session has ended');
+    this.DeactivateState();
   });
 
   this.SpotConn.on(this.Events.Seek, (position) => {
@@ -711,12 +711,10 @@ ControllerVolspotconnect.prototype.seek = function (position) {
 };
 
 ControllerVolspotconnect.prototype.seekTimerAction = function () {
-  var self = this;
-
-  if (self.state.status === 'play') {
+  if (this.state.status === 'play') {
     if (seekTimer === undefined) {
       seekTimer = setInterval(() => {
-        self.state.seek = self.state.seek + 1000;
+        this.state.seek = this.state.seek + 1000;
       }, 1000);
     }
   } else {
