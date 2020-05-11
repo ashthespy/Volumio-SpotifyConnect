@@ -710,6 +710,32 @@ ControllerVolspotconnect.prototype.seek = function (position) {
   });
 };
 
+ControllerVolspotconnect.prototype.random = function (value) {
+  logger.cmd(`Received Random: ${value}`);
+  return this.spotifyApi.setShuffle({ state: value }).then(() => {
+    this.state.random = value;
+    this.pushState();
+  }).catch(error => {
+    this.commandRouter.pushToastMessage('error', 'Spotify Connect API Error', error.message);
+    logger.error(error);
+  });
+};
+
+ControllerVolspotconnect.prototype.repeat = function (value, repeatSingle) {
+  let state = value ? 'context' : 'off';
+  state = repeatSingle ? 'track' : state;
+  logger.cmd(`Received Repeat: ${value}-${repeatSingle} => ${state}`);
+  // track, context or off.
+  return this.spotifyApi.setRepeat({ state: state }).then(() => {
+    this.state.repeat = value;
+    this.state.repeatSingle = repeatSingle;
+    this.pushState();
+  }).catch(error => {
+    this.commandRouter.pushToastMessage('error', 'Spotify Connect API Error', error.message);
+    logger.error(error);
+  });
+};
+
 ControllerVolspotconnect.prototype.seekTimerAction = function () {
   if (this.state.status === 'play') {
     if (seekTimer === undefined) {
