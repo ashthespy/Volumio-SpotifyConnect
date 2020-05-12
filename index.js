@@ -83,6 +83,7 @@ ControllerVolspotconnect.prototype.volspotconnectDaemonConnect = function (defer
   this.displayname = 'volspotconnect2';
   this.accessToken = '';
   this.active = false;
+  this.isStopping = false;
   this.DeviceActive = false;
   this.SinkActive = false;
   this.VLSStatus = '';
@@ -178,7 +179,11 @@ ControllerVolspotconnect.prototype.volspotconnectDaemonConnect = function (defer
     clearInterval(seekTimer);
     seekTimer = undefined;
     this.state.status = 'pause';
-    this.commandRouter.servicePushState(this.state, this.servicename);
+    if (this.active && !this.isStopping) {
+      this.commandRouter.servicePushState(this.state, this.servicename);
+    } else {
+      logger.debug(`Not pushing Pause { active: ${this.active}, isStopping: ${this.isStopping}}`);
+    }
   });
 
   this.SpotConn.on(this.Events.DeviceInactive, (data) => {
@@ -204,9 +209,13 @@ ControllerVolspotconnect.prototype.volspotconnectDaemonConnect = function (defer
     this.state.duration = Math.ceil(meta.duration_ms / 1000);
     this.state.seek = meta.position_ms;
     this.state.albumart = `https://i.scdn.co/image/${albumartId}`;
-    logger.evnt(`Pushing metadata Vollibrespot: ${this.active}`);
-    // This will not succeed if volspotconnect2 isn't the current active service
-    this.pushState();
+    if (!this.isStopping) {
+      logger.debug('Pushing metadata');
+      // This will not succeed if volspotconnect2 isn't the current active service
+      this.pushState();
+    } else {
+      logger.debug(`Not pushing metadata: { active: ${this.active}, isStopping: ${this.isStopping} }`);
+    }
   });
 
   this.SpotConn.on(this.Events.Token, (token) => {
@@ -647,12 +656,14 @@ ControllerVolspotconnect.prototype.awawitSpocon = function (type) {
 ControllerVolspotconnect.prototype.stop = function () {
   const volStop = process.hrtime();
   logger.cmd('Received stop');
-  // TODO: await confirmation of this command
+  this.isStopping = true;
   this.SpotConn.sendmsg(msgMap.get('Pause'));
   // Statemachine doesn't seem Promise aware..¯\_(ツ)_/¯
-  return this.awawitSpocon(this.Events.PongPause).then(() => {
-    // TODO: Is this sufficient, or should we wait for SinkInactive event..
+  // return this.awawitSpocon(this.Events.PongPause).then(() => {
+  // TODO: Is this sufficient, or should we wait for SinkInactive event..
+  return this.awawitSpocon(this.Events.SinkInactive).then(() => {
     this.active = false;
+    this.isStopping = false;
     const end = process.hrtime(volStop);
     logger.debug(`ResolvedStop in \u001b[31m ${end[0]}s ${(end[1] / 1000000).toFixed(2)}ms \u001b[39m`);
   }).catch(error => {
@@ -672,13 +683,18 @@ ControllerVolspotconnect.prototype.pause = function () {
 ControllerVolspotconnect.prototype.play = function () {
   logger.cmd(`Received play: <${this.active}>`);
   if (this.active) {
-    return this.spotifyApi.play().catch(error => {
+    return this.spotifyApi.play().then(e => {
+      if (this.state.status !== 'play') {
+        this.state.staus = 'play';
+        this.pushState();
+      }
+    }).catch(error => {
       this.commandRouter.pushToastMessage('error', 'Spotify Connect API Error', error.message);
       logger.error(error);
       this.checkActive();
     });
   } else {
-    logger.debug('Playing on:', this.device);
+    logger.debug('Playing on:', this.deviceID);
     return this.spotifyApi.transferMyPlayback({ deviceIds: [this.deviceID], play: true }).catch(error => {
       this.commandRouter.pushToastMessage('error', 'Spotify Connect API Error', error.message);
       logger.error(error);
