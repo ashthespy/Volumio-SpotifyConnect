@@ -527,7 +527,8 @@ ControllerVolspotconnect.prototype.createConfigFile = async function () {
       mixer = '',
       mixdev = '',
       mixeropts = '',
-      initvolstr = '';
+      initvolstr = '',
+      mixidx = 0;
     /* eslint-enable one-var */
     let mixlin = false;
     if ((mixname === '') || (mixname === 'None')) {
@@ -547,11 +548,6 @@ ControllerVolspotconnect.prototype.createConfigFile = async function () {
       if (outdev === 'softvolume') {
         hwdev = outdev;
         mixlin = true;
-      } else {
-        hwdev = `plughw:${outdev}`;
-      }
-
-      if (outdev === 'softvolume') {
         idxcard = this.getAdditionalConf('audio_interface', 'alsa_controller', 'softvolumenumber');
       } else if (outdev === 'Loopback') {
         const vconfig = fs.readFileSync('/tmp/vconfig.json', 'utf8', function (err, data) {
@@ -562,8 +558,14 @@ ControllerVolspotconnect.prototype.createConfigFile = async function () {
         const vconfigJSON = JSON.parse(vconfig);
         idxcard = vconfigJSON.outputdevice.value;
         mixname = vconfigJSON.mixer.value;
-      } else {
-        idxcard = outdev;
+      } else { // We have an actual Hardware mixer
+        hwdev = `plughw:${outdev}`;
+        // outputdevice = card,device..
+        // ¯\_(ツ)_/¯
+        idxcard = outdev.split(',')[0];
+        // Similar storey with mixer,index
+        [mixname, mixidx] = mixname.split(',');
+        mixidx = mixidx || 0;
       }
 
       mixdev = `hw:${idxcard}`;
@@ -584,6 +586,7 @@ ControllerVolspotconnect.prototype.createConfigFile = async function () {
       .replace('${mixer}', mixer)
       .replace('${mixname}', mixname)
       .replace('${mixdev}', mixdev)
+      .replace('${mixidx}', mixidx)
       .replace('${mixlin}', mixlin)
       .replace('${mixeropts}', mixeropts)
       .replace('${initvol}', initvolstr)
